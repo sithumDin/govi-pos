@@ -1,0 +1,554 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Product, CartItem, Customer, Credit } from '@/lib/types';
+import { generateReceipt } from '@/lib/pdf';
+
+function formatLKR(amount: number) {
+  return `LKR ${amount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export default function WholesalePage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [credits, setCredits] = useState<Credit[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [discount, setDiscount] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [isCredit, setIsCredit] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [tab, setTab] = useState<'pos' | 'credits'>('pos');
+  const [paymentModal, setPaymentModal] = useState<Credit | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/products').then((r) => r.json()),
+      fetch('/api/customers?type=wholesale').then((r) => r.json()),
+      fetch('/api/credit').then((r) => r.json()),
+    ])
+      .then(([prods, custs, creds]) => {
+        setProducts(prods);
+        setCustomers(custs);
+        setCredits(creds);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const refreshCredits = () => {
+    fetch('/api/credit').then((r) => r.json()).then(setCredits);
+  };
+
+  const addToCart = (product: Product) => {
+    if (product.stock <= 0) return;
+    const existing = cart.find((c) => c.product._id === product._id);
+    if (existing) {
+      if (existing.qty >= product.stock) return;
+      setCart(cart.map((c) =>
+        c.product._id === product._id ? { ...c, qty: c.qty + 1 } : c
+      ));
+    } else {
+      setCart([...cart, { product, qty: 1, discount: 0 }]);
+    }
+  };
+
+  const updateQty = (productId: string, delta: number) => {
+    setCart(cart.map((c) => {
+      if (c.product._id === productId) {
+        const newQty = c.qty + delta;
+        if (newQty <= 0 || newQty > c.product.stock) return c;
+        return { ...c, qty: newQty };
+      }
+      return c;
+    }));
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(cart.filter((c) => c.product._id !== productId));
+  };
+
+  const subtotal = cart.reduce((sum, c) => sum + c.product.sellingPrice * c.qty, 0);
+  const discountAmount = parseFloat(discount) || 0;
+  const total = subtotal - discountAmount;
+  const totalCost = cart.reduce((sum, c) => sum + c.product.costPrice * c.qty, 0);
+  const profit = total - totalCost;
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    if (isCredit && !selectedCustomer) {
+      alert('Please select a customer for credit sale');
+      return;
+    }
+    setProcessing(true);
+
+    const customer = customers.find((c) => c._id === selectedCustomer);
+
+    const saleData = {
+      customer: selectedCustomer || undefined,
+      customerName: customer?.name || 'Wholesale Customer',
+      items: cart.map((c) => ({
+        product: c.product._id,
+        productName: c.product.name,
+        qty: c.qty,
+        unitPrice: c.product.sellingPrice,
+        costPrice: c.product.costPrice,
+        total: c.product.sellingPrice * c.qty,
+      })),
+      subtotal,
+      discount: discountAmount,
+      total,
+      profit,
+      paymentMethod: isCredit ? 'transfer' : paymentMethod,
+      saleType: 'wholesale' as const,
+      date: new Date().toISOString(),
+    };
+
+    try {
+      const res = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saleData),
+      });
+
+      if (res.ok) {
+        const sale = await res.json();
+
+        // Create credit record if credit sale
+        if (isCredit) {
+          await fetch('/api/credit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customer: selectedCustomer,
+              customerName: customer?.name,
+              sale: sale._id,
+              invoiceNo: sale.invoiceNo,
+              totalAmount: total,
+              paidAmount: 0,
+              remainingAmount: total,
+              payments: [],
+              status: 'pending',
+            }),
+          });
+          refreshCredits();
+        }
+
+        generateReceipt(sale);
+        setCart([]);
+        setDiscount('');
+        setSelectedCustomer('');
+        setIsCredit(false);
+
+        const updatedProducts = await fetch('/api/products').then((r) => r.json());
+        setProducts(updatedProducts);
+      }
+    } catch (error) {
+      console.error('Checkout failed:', error);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCreditPayment = async () => {
+    if (!paymentModal || !paymentAmount) return;
+    const amount = parseFloat(paymentAmount);
+    if (amount <= 0 || amount > paymentModal.remainingAmount) return;
+
+    try {
+      const res = await fetch('/api/credit', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creditId: paymentModal._id,
+          payment: {
+            amount,
+            date: new Date().toISOString(),
+            note: paymentNote,
+          },
+        }),
+      });
+
+      if (res.ok) {
+        refreshCredits();
+        setPaymentModal(null);
+        setPaymentAmount('');
+        setPaymentNote('');
+      }
+    } catch (error) {
+      console.error('Payment failed:', error);
+    }
+  };
+
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const pendingCredits = credits.filter((c) => c.status !== 'paid');
+  const totalOutstanding = pendingCredits.reduce((sum, c) => sum + c.remainingAmount, 0);
+
+  if (loading) {
+    return <div className="loading-spinner"><div className="spinner" /></div>;
+  }
+
+  return (
+    <div className="animate-fade-in">
+      <div className="page-header">
+        <h1>🏭 Wholesale</h1>
+        <p>Wholesale sales and credit management</p>
+      </div>
+
+      <div className="tabs">
+        <button className={`tab ${tab === 'pos' ? 'active' : ''}`} onClick={() => setTab('pos')}>
+          Sales POS
+        </button>
+        <button className={`tab ${tab === 'credits' ? 'active' : ''}`} onClick={() => setTab('credits')}>
+          Credit Tracker ({pendingCredits.length})
+        </button>
+      </div>
+
+      {tab === 'pos' ? (
+        <div className="pos-layout">
+          {/* Products */}
+          <div>
+            <div className="search-bar" style={{ marginBottom: '16px', maxWidth: '100%' }}>
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="pos-products">
+              {filteredProducts.map((p) => (
+                <div
+                  key={p._id}
+                  className="product-card"
+                  onClick={() => addToCart(p)}
+                  style={{ opacity: p.stock <= 0 ? 0.5 : 1 }}
+                >
+                  <div className="product-name">{p.name}</div>
+                  <div className="product-price">{formatLKR(p.sellingPrice)}</div>
+                  <div className={`product-stock ${p.stock <= 0 ? 'out-of-stock' : ''}`}>
+                    {p.stock <= 0 ? 'Out of Stock' : `${p.stock} ${p.unit} available`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cart */}
+          <div className="cart-panel">
+            <div className="cart-header">
+              <h3>🧾 Wholesale Cart</h3>
+              {cart.length > 0 && <span className="badge badge-warning">{cart.length}</span>}
+            </div>
+
+            {cart.length === 0 ? (
+              <div className="cart-empty">
+                <span>🏭</span>
+                Click products to add to cart
+              </div>
+            ) : (
+              <>
+                <div className="cart-items">
+                  {cart.map((item) => (
+                    <div key={item.product._id} className="cart-item">
+                      <div className="cart-item-info">
+                        <div className="cart-item-name">{item.product.name}</div>
+                        <div className="cart-item-price">
+                          {formatLKR(item.product.sellingPrice)} × {item.qty}
+                        </div>
+                      </div>
+                      <div className="cart-item-controls">
+                        <button className="qty-btn" onClick={() => updateQty(item.product._id!, -1)}>−</button>
+                        <span className="qty-value">{item.qty}</span>
+                        <button className="qty-btn" onClick={() => updateQty(item.product._id!, 1)}>+</button>
+                      </div>
+                      <div className="cart-item-total">
+                        {formatLKR(item.product.sellingPrice * item.qty)}
+                      </div>
+                      <button className="cart-remove" onClick={() => removeFromCart(item.product._id!)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Customer Selection */}
+                <div className="checkout-section">
+                  <label>Select Customer</label>
+                  <select
+                    className="form-select"
+                    value={selectedCustomer}
+                    onChange={(e) => setSelectedCustomer(e.target.value)}
+                    style={{ marginTop: '6px' }}
+                  >
+                    <option value="">Select customer...</option>
+                    {customers.map((c) => (
+                      <option key={c._id} value={c._id}>{c.name} — {c.phone}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Credit Toggle */}
+                <div className="checkout-section">
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                    onClick={() => setIsCredit(!isCredit)}
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '22px',
+                      borderRadius: '11px',
+                      background: isCredit ? 'var(--emerald-500)' : 'var(--border-color)',
+                      position: 'relative',
+                      transition: 'background 0.2s',
+                    }}>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        background: 'white',
+                        position: 'absolute',
+                        top: '2px',
+                        left: isCredit ? '20px' : '2px',
+                        transition: 'left 0.2s',
+                      }} />
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: 600 }}>Credit Sale</span>
+                  </div>
+                </div>
+
+                {!isCredit && (
+                  <>
+                    <div className="checkout-section">
+                      <label>Discount (LKR)</label>
+                      <input
+                        className="form-input"
+                        type="number"
+                        placeholder="0.00"
+                        value={discount}
+                        onChange={(e) => setDiscount(e.target.value)}
+                        style={{ marginTop: '6px' }}
+                      />
+                    </div>
+                    <div className="checkout-section">
+                      <label>Payment Method</label>
+                      <div className="payment-methods">
+                        {(['cash', 'card', 'transfer'] as const).map((m) => (
+                          <button
+                            key={m}
+                            className={`payment-method ${paymentMethod === m ? 'active' : ''}`}
+                            onClick={() => setPaymentMethod(m)}
+                          >
+                            {m === 'cash' ? '💵' : m === 'card' ? '💳' : '🏦'} {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="cart-summary">
+                  <div className="cart-summary-row">
+                    <span>Subtotal</span>
+                    <span>{formatLKR(subtotal)}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="cart-summary-row">
+                      <span>Discount</span>
+                      <span style={{ color: 'var(--danger)' }}>-{formatLKR(discountAmount)}</span>
+                    </div>
+                  )}
+                  <div className="cart-summary-row total">
+                    <span>Total</span>
+                    <span>{formatLKR(total)}</span>
+                  </div>
+                  {isCredit && (
+                    <div className="cart-summary-row" style={{ marginTop: '4px' }}>
+                      <span>⚠️ Credit Sale</span>
+                      <span style={{ color: 'var(--warning)' }}>Due: {formatLKR(total)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="cart-actions">
+                  <button
+                    className="btn btn-primary btn-lg"
+                    onClick={handleCheckout}
+                    disabled={processing}
+                    style={{ width: '100%' }}
+                  >
+                    {processing ? 'Processing...' : isCredit ? `📋 Create Credit Sale — ${formatLKR(total)}` : `💳 Complete Sale — ${formatLKR(total)}`}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setCart([])} style={{ width: '100%' }}>
+                    Clear Cart
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Credit Tracker Tab */
+        <div>
+          {/* Outstanding Summary */}
+          <div className="stat-cards-grid" style={{ marginBottom: '24px' }}>
+            <div className="stat-card">
+              <div className="stat-card-header">
+                <span className="stat-card-label">Total Outstanding</span>
+                <div className="stat-card-icon yellow">💰</div>
+              </div>
+              <div className="stat-card-value" style={{ color: 'var(--warning)' }}>
+                {formatLKR(totalOutstanding)}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card-header">
+                <span className="stat-card-label">Pending Credits</span>
+                <div className="stat-card-icon red">📋</div>
+              </div>
+              <div className="stat-card-value">{pendingCredits.length}</div>
+            </div>
+          </div>
+
+          {pendingCredits.length === 0 ? (
+            <div className="empty-state">
+              <span className="icon">✅</span>
+              <h3>No Outstanding Credits</h3>
+              <p>All wholesale credits have been paid.</p>
+            </div>
+          ) : (
+            <div className="credit-cards">
+              {pendingCredits.map((credit) => (
+                <div key={credit._id} className="credit-card">
+                  <div className="credit-card-header">
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>
+                        {credit.customerName}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                        {credit.invoiceNo}
+                      </div>
+                    </div>
+                    <span className={`badge ${credit.status === 'partial' ? 'badge-warning' : 'badge-danger'}`}>
+                      {credit.status}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total</div>
+                      <div style={{ fontWeight: 700, fontSize: '16px' }}>{formatLKR(credit.totalAmount)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Paid</div>
+                      <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--emerald-400)' }}>{formatLKR(credit.paidAmount)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Remaining</div>
+                      <div className="credit-amount">{formatLKR(credit.remainingAmount)}</div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', marginBottom: '12px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${(credit.paidAmount / credit.totalAmount) * 100}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, var(--emerald-600), var(--emerald-400))',
+                      borderRadius: '3px',
+                      transition: 'width 0.5s ease',
+                    }} />
+                  </div>
+
+                  {/* Payment History */}
+                  {credit.payments && credit.payments.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>Payments:</div>
+                      {credit.payments.map((p, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>{new Date(p.date).toLocaleDateString('en-LK')}</span>
+                          <span style={{ color: 'var(--emerald-400)', fontWeight: 600 }}>{formatLKR(p.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => { setPaymentModal(credit); setPaymentAmount(''); setPaymentNote(''); }}
+                    style={{ width: '100%' }}
+                  >
+                    💵 Record Payment
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Credit Payment Modal */}
+      {paymentModal && (
+        <div className="modal-overlay" onClick={() => setPaymentModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Record Payment</h2>
+              <button className="modal-close" onClick={() => setPaymentModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px', color: 'var(--text-muted)' }}>
+                <strong>{paymentModal.customerName}</strong> — Invoice {paymentModal.invoiceNo}
+              </p>
+              <p style={{ marginBottom: '16px' }}>
+                Outstanding: <strong style={{ color: 'var(--warning)' }}>{formatLKR(paymentModal.remainingAmount)}</strong>
+              </p>
+              <div className="form-group">
+                <label className="form-label">Payment Amount (LKR)</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  max={paymentModal.remainingAmount}
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Note (optional)</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="Payment note..."
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                />
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setPaymentAmount(String(paymentModal.remainingAmount));
+                }}
+                style={{ marginBottom: '8px' }}
+              >
+                Pay Full Amount
+              </button>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setPaymentModal(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleCreditPayment} disabled={!paymentAmount}>
+                Record Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
