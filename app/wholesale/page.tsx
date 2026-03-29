@@ -23,45 +23,13 @@ export default function WholesalePage() {
   const [discount, setDiscount] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [isCredit, setIsCredit] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [sendWhatsApp, setSendWhatsApp] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [tab, setTab] = useState<'pos' | 'credits'>('pos');
   const [paymentModal, setPaymentModal] = useState<Credit | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
-
-  const sendWholesaleWhatsApp = async (sale: any, customerPhone?: string, creditSale?: boolean) => {
-    if (!customerPhone) {
-      return { sent: false, reason: 'no-phone' };
-    }
-
-    const text = [
-      `Govi Sewana Wholesale Receipt`,
-      `Invoice: ${sale.invoiceNo}`,
-      `Customer: ${sale.customerName || 'Wholesale Customer'}`,
-      `Total: ${formatLKR(sale.total)}`,
-      creditSale ? `Status: CREDIT (Amount due ${formatLKR(sale.total)})` : `Status: PAID (${sale.paymentMethod})`,
-      `Date: ${new Date(sale.date).toLocaleString('en-LK')}`,
-      `Thank you!`,
-    ].join('\n');
-
-    try {
-      const res = await fetch('/api/whatsapp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: customerPhone, text }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: 'Failed to send WhatsApp message' }));
-        return { sent: false, reason: data.error || 'Failed to send WhatsApp message' };
-      }
-
-      return { sent: true };
-    } catch (error) {
-      console.error('WhatsApp send failed:', error);
-      return { sent: false, reason: 'network-error' };
-    }
-  };
 
   useEffect(() => {
     Promise.all([
@@ -120,6 +88,7 @@ export default function WholesalePage() {
   const total = subtotal - discountAmount;
   const totalCost = cart.reduce((sum, c) => sum + c.product.costPrice * c.qty, 0);
   const profit = total - totalCost;
+  const whatsappPhonePattern = /^\+94\s\d{2}\s\d{3}\s\d{4}$/;
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
@@ -127,6 +96,19 @@ export default function WholesalePage() {
       alert('Please select a customer for credit sale');
       return;
     }
+
+    if (sendWhatsApp) {
+      if (!customerPhone.trim()) {
+        alert('Please enter customer WhatsApp number. Format: +94 76 180 9833');
+        return;
+      }
+
+      if (!whatsappPhonePattern.test(customerPhone.trim())) {
+        alert('Invalid number format. Please use: +94 76 180 9833');
+        return;
+      }
+    }
+
     setProcessing(true);
 
     const customer = customers.find((c) => c._id === selectedCustomer);
@@ -182,20 +164,44 @@ export default function WholesalePage() {
         }
 
         generateReceipt(sale);
-        const waStatus = await sendWholesaleWhatsApp(sale, customer?.phone, isCredit);
-        if (!waStatus.sent) {
-          if (waStatus.reason === 'no-phone') {
-            alert('Sale completed. WhatsApp was skipped because customer phone is missing.');
-          } else {
-            alert(`Sale completed. WhatsApp failed: ${waStatus.reason}. Ensure this number is added as an allowed test recipient in Meta and includes country code.`);
+        
+        if (sendWhatsApp) {
+          const waText = [
+            `Govi Sewana Wholesale Receipt`,
+            `Invoice: ${sale.invoiceNo}`,
+            `Customer: ${sale.customerName || 'Wholesale Customer'}`,
+            `Total: ${formatLKR(sale.total)}`,
+            isCredit ? `Status: CREDIT (Amount due ${formatLKR(sale.total)})` : `Status: PAID (${sale.paymentMethod})`,
+            `Date: ${new Date(sale.date).toLocaleString('en-LK')}`,
+            `Thank you!`,
+          ].join('\n');
+
+          try {
+            const waRes = await fetch('/api/whatsapp/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to: customerPhone.trim(), text: waText }),
+            });
+
+            if (waRes.ok) {
+              alert('Sale completed. WhatsApp message sent successfully.');
+            } else {
+              const waData = await waRes.json().catch(() => ({ error: 'Failed to send WhatsApp' }));
+              alert(`Sale completed. WhatsApp failed: ${waData.error || 'Unknown error'}. Please ensure the phone number is correct with country code (+94).`);
+            }
+          } catch (error) {
+            console.error('WhatsApp send error:', error);
+            alert('Sale completed. WhatsApp could not be sent due to a network error.');
           }
         } else {
-          alert('Sale completed. WhatsApp message sent successfully.');
+          alert('Sale completed.');
         }
         setCart([]);
         setDiscount('');
         setSelectedCustomer('');
         setIsCredit(false);
+        setCustomerPhone('');
+        setSendWhatsApp(false);
 
         const updatedProducts = await fetch('/api/products').then((r) => r.json());
         setProducts(updatedProducts);
@@ -345,6 +351,27 @@ export default function WholesalePage() {
                       <option key={c._id} value={c._id}>{c.name} — {c.phone}</option>
                     ))}
                   </select>
+                </div>
+
+                <div className="checkout-section">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={sendWhatsApp}
+                      onChange={(e) => setSendWhatsApp(e.target.checked)}
+                    />
+                    Do you want to send WhatsApp receipt to customer?
+                  </label>
+                  {sendWhatsApp && (
+                    <input
+                      className="form-input"
+                      type="text"
+                      placeholder="+94 76 180 9833"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      style={{ marginTop: '10px' }}
+                    />
+                  )}
                 </div>
 
                 {/* Credit Toggle */}
