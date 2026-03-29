@@ -98,6 +98,7 @@ export async function GET() {
       categoryBreakdown: categoryMap,
     });
   } catch (error) {
+    console.error('Server Error:', error);
     return Response.json({ error: 'Failed to fetch dashboard data' }, { status: 500 });
   }
 }
