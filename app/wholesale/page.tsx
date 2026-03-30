@@ -209,7 +209,12 @@ export default function WholesalePage() {
               alert('Sale completed. WhatsApp message sent successfully.');
             } else {
               const waData = await waRes.json().catch(() => ({ error: 'Failed to send WhatsApp' }));
-              alert(`Sale completed. WhatsApp failed: ${waData.error || 'Unknown error'}. Please ensure the phone number is correct with country code (+94).`);
+              const errorText = String(waData.error || 'Unknown error');
+              if (errorText.toLowerCase().includes('not configured')) {
+                alert(`Sale completed. WhatsApp failed: ${errorText}. Please set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID, then restart the server.`);
+              } else {
+                alert(`Sale completed. WhatsApp failed: ${errorText}. Please ensure the phone number is correct with country code (+94).`);
+              }
             }
           } catch (error) {
             console.error('WhatsApp send error:', error);
@@ -309,13 +314,13 @@ export default function WholesalePage() {
 
       if (cart.length === 0) return;
 
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedCartIndex((prev) => (prev + 1) % cart.length);
         return;
       }
 
-      if (e.key === 'ArrowLeft') {
+      if (e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedCartIndex((prev) => (prev - 1 + cart.length) % cart.length);
         return;
@@ -323,13 +328,13 @@ export default function WholesalePage() {
 
       if (!selectedCartItem) return;
 
-      if (e.key === 'ArrowUp') {
+      if (e.key === 'ArrowRight') {
         e.preventDefault();
         updateQty(selectedCartItem.product._id!, 1);
         return;
       }
 
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowLeft') {
         e.preventDefault();
         if (selectedCartItem.qty > 1) {
           updateQty(selectedCartItem.product._id!, -1);

@@ -24,8 +24,16 @@ function normalizePhone(raw: string) {
 
 export function getWhatsAppConfig() {
   return {
-    token: process.env.WHATSAPP_ACCESS_TOKEN || '',
-    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+    token:
+      process.env.WHATSAPP_ACCESS_TOKEN ||
+      process.env.WHATSAPP_TOKEN ||
+      process.env.WA_ACCESS_TOKEN ||
+      '',
+    phoneNumberId:
+      process.env.WHATSAPP_PHONE_NUMBER_ID ||
+      process.env.WHATSAPP_FROM_PHONE_NUMBER_ID ||
+      process.env.WA_PHONE_NUMBER_ID ||
+      '',
     apiVersion: process.env.WHATSAPP_API_VERSION || 'v22.0',
   };
 }
@@ -34,7 +42,10 @@ export async function sendWhatsAppText({ to, text }: SendWhatsAppTextInput) {
   const { token, phoneNumberId, apiVersion } = getWhatsAppConfig();
 
   if (!token || !phoneNumberId) {
-    throw new Error('WhatsApp API is not configured');
+    const missing: string[] = [];
+    if (!token) missing.push('access token');
+    if (!phoneNumberId) missing.push('phone number id');
+    throw new Error(`WhatsApp API is not configured: missing ${missing.join(' and ')}`);
   }
 
   const normalizedTo = normalizePhone(to);

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: '📊' },
@@ -18,6 +18,22 @@ export default function Sidebar() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; username: string; role: string } | null>(null);
+  const [startingLockdown, setStartingLockdown] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [isLockdownMode, setIsLockdownMode] = useState(false);
+  const [allowedDomain, setAllowedDomain] = useState('');
+  const allowExitRef = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const params = new URLSearchParams(window.location.search);
+    setIsLockdownMode(params.get('lockdown') === '1');
+    setAllowedDomain(params.get('allowedDomain') || window.location.hostname);
+  }, [mounted, pathname]);
 
   useEffect(() => {
     if (pathname !== '/login') {
@@ -35,6 +51,204 @@ export default function Sidebar() {
     router.push('/login');
     router.refresh();
   };
+
+  const handleStartLockdown = () => {
+    if (typeof window === 'undefined' || startingLockdown) return;
+
+    setStartingLockdown(true);
+    const url = new URL(window.location.href);
+    url.searchParams.set('lockdown', '1');
+    url.searchParams.set('allowedDomain', window.location.hostname);
+
+    const width = window.screen.availWidth || window.screen.width;
+    const height = window.screen.availHeight || window.screen.height;
+    const popup = window.open(
+      url.toString(),
+      'pos_lockdown_window',
+      `popup=yes,toolbar=no,menubar=no,location=no,status=no,scrollbars=no,resizable=yes,width=${width},height=${height},left=0,top=0`
+    );
+
+    if (!popup) {
+      setStartingLockdown(false);
+      alert('Popup blocked. Please allow popups for this site.');
+      return;
+    }
+
+    const openFullscreen = () => {
+      try {
+        popup.focus();
+        const docEl = popup.document?.documentElement as HTMLElement | undefined;
+        if (docEl?.requestFullscreen) {
+          void docEl.requestFullscreen().catch(() => {});
+        }
+      } catch {
+        // Ignore cross-window timing issues.
+      }
+    };
+
+    if (popup.document?.readyState === 'complete') {
+      openFullscreen();
+    } else {
+      popup.addEventListener('load', openFullscreen, { once: true });
+    }
+
+    setStartingLockdown(false);
+  };
+
+  const handleExitLockdown = async () => {
+    if (!user || user.role !== 'admin') return;
+
+    const password = window.prompt('Enter admin password to exit Lockdown Mode:');
+    if (!password) return;
+
+    const verify = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user.username, password }),
+    });
+
+    if (!verify.ok) {
+      alert('Incorrect password. Lockdown mode remains active.');
+      return;
+    }
+
+    allowExitRef.current = true;
+
+    if (window.opener && !window.opener.closed) {
+      window.close();
+      return;
+    }
+
+    const safeUrl = new URL(window.location.href);
+    safeUrl.searchParams.delete('lockdown');
+    safeUrl.searchParams.delete('allowedDomain');
+    window.location.replace(safeUrl.toString());
+  };
+
+  useEffect(() => {
+    if (!isLockdownMode) return;
+
+    if (allowedDomain && !window.location.hostname.includes(allowedDomain)) {
+      window.location.replace(`${window.location.protocol}//${allowedDomain}`);
+      return;
+    }
+
+    const blocked = (e: KeyboardEvent) => {
+      const key = e.key;
+      const isBlockedCombo =
+        (e.altKey && key === 'F4') ||
+        (e.altKey && key === 'Tab') ||
+        (e.ctrlKey && key.toLowerCase() === 'w') ||
+        (e.ctrlKey && key.toLowerCase() === 't') ||
+        (e.ctrlKey && key.toLowerCase() === 'n') ||
+        (e.ctrlKey && key === 'Tab') ||
+        key === 'F1' ||
+        key === 'Meta';
+
+      if (isBlockedCombo) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const focusableSelector = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+      '[role="button"]',
+    ].join(',');
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select';
+    };
+
+    const moveFocusByArrow = (e: KeyboardEvent) => {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+      const targetEl = e.target as HTMLElement | null;
+      if (targetEl?.tagName.toLowerCase() === 'select' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const selectEl = targetEl as HTMLSelectElement;
+        const dir = e.key === 'ArrowRight' ? 1 : -1;
+        const nextIndex = Math.min(Math.max(selectEl.selectedIndex + dir, 0), selectEl.options.length - 1);
+        if (nextIndex !== selectEl.selectedIndex) {
+          e.preventDefault();
+          selectEl.selectedIndex = nextIndex;
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return;
+      }
+
+      // Keep native arrow behavior inside editable controls and dropdowns.
+      if (isEditableTarget(e.target)) return;
+
+      const focusables = Array.from(document.querySelectorAll<HTMLElement>(focusableSelector))
+        .filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1 && el.offsetParent !== null);
+      if (focusables.length === 0) return;
+
+      const active = document.activeElement as HTMLElement | null;
+      let index = active ? focusables.indexOf(active) : -1;
+
+      const movingForward = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+      if (index === -1) {
+        index = movingForward ? 0 : focusables.length - 1;
+      } else {
+        index = movingForward
+          ? (index + 1) % focusables.length
+          : (index - 1 + focusables.length) % focusables.length;
+      }
+
+      e.preventDefault();
+      focusables[index]?.focus();
+    };
+
+    const blockContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    const confirmExit = (e: BeforeUnloadEvent) => {
+      if (allowExitRef.current) return;
+      e.preventDefault();
+      e.returnValue = 'Exit POS Lockdown Mode?';
+    };
+
+    const guardLinks = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const anchor = target?.closest('a') as HTMLAnchorElement | null;
+      if (!anchor?.href) return;
+
+      try {
+        const hrefUrl = new URL(anchor.href, window.location.origin);
+        if (!hrefUrl.hostname.includes(allowedDomain)) {
+          e.preventDefault();
+          alert('Navigation outside POS domain is blocked in Lockdown Mode.');
+        }
+      } catch {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', blocked, true);
+    window.addEventListener('keydown', moveFocusByArrow, true);
+    window.addEventListener('contextmenu', blockContextMenu);
+    window.addEventListener('beforeunload', confirmExit);
+    document.addEventListener('click', guardLinks, true);
+
+    return () => {
+      window.removeEventListener('keydown', blocked, true);
+      window.removeEventListener('keydown', moveFocusByArrow, true);
+      window.removeEventListener('contextmenu', blockContextMenu);
+      window.removeEventListener('beforeunload', confirmExit);
+      document.removeEventListener('click', guardLinks, true);
+    };
+  }, [allowedDomain, isLockdownMode]);
 
   if (pathname === '/login') return null;
 
@@ -81,6 +295,28 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
+        <div style={{ padding: '0 14px 8px' }}>
+          {!mounted ? null : !isLockdownMode ? (
+            <button
+              onClick={handleStartLockdown}
+              className="btn btn-danger"
+              style={{ width: '100%', fontSize: '12px', padding: '8px' }}
+            >
+              {startingLockdown ? 'Starting Lockdown...' : 'Lockdown Mode'}
+            </button>
+          ) : (
+            user?.role === 'admin' && (
+              <button
+                onClick={handleExitLockdown}
+                className="btn btn-secondary"
+                style={{ width: '100%', fontSize: '12px', padding: '8px' }}
+              >
+                EXIT Lockdown (Admin)
+              </button>
+            )
+          )}
+        </div>
 
         <div className="sidebar-footer" style={{ borderTop: '1px solid var(--border-color)', marginTop: 'auto', paddingTop: '16px' }}>
           {user ? (
