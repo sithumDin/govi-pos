@@ -22,10 +22,21 @@ export default function Sidebar() {
   const [mounted, setMounted] = useState(false);
   const [isLockdownMode, setIsLockdownMode] = useState(false);
   const [allowedDomain, setAllowedDomain] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [showLogoUpload, setShowLogoUpload] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   const allowExitRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
+    // Load logo on mount
+    fetch('/api/logo')
+      .then(res => res.json())
+      .then(data => {
+        if (data.url) setLogoUrl(data.url);
+      })
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -50,6 +61,41 @@ export default function Sidebar() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
     router.refresh();
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+
+      const res = await fetch('/api/logo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Upload failed' }));
+        alert(data.error || 'Failed to upload logo');
+        return;
+      }
+
+      const data = await res.json();
+      setLogoUrl(data.url + '?t=' + Date.now()); // Add timestamp to bust cache
+      setShowLogoUpload(false);
+      if (logoFileRef.current) logoFileRef.current.value = '';
+      alert('Logo uploaded successfully!');
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      alert('Failed to upload logo');
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleStartLockdown = () => {
@@ -257,7 +303,18 @@ export default function Sidebar() {
       {/* Mobile Header */}
       <div className="mobile-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div className="sidebar-logo">🌿</div>
+          <div 
+            className="sidebar-logo" 
+            onClick={() => user?.role === 'admin' && setShowLogoUpload(true)}
+            style={{ cursor: user?.role === 'admin' ? 'pointer' : 'default' }}
+            title={user?.role === 'admin' ? 'Click to change logo' : ''}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', borderRadius: '8px', objectFit: 'cover' }} />
+            ) : (
+              '🌿'
+            )}
+          </div>
           <span style={{ fontWeight: 700, fontSize: '15px' }}>Govi Sewana</span>
         </div>
         <button className="menu-btn" onClick={() => setOpen(true)}>☰</button>
@@ -272,7 +329,18 @@ export default function Sidebar() {
       {/* Sidebar */}
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo">🌿</div>
+          <div 
+            className="sidebar-logo"
+            onClick={() => user?.role === 'admin' && setShowLogoUpload(true)}
+            style={{ cursor: user?.role === 'admin' ? 'pointer' : 'default' }}
+            title={user?.role === 'admin' ? 'Click to change logo' : ''}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', borderRadius: '8px', objectFit: 'cover' }} />
+            ) : (
+              '🌿'
+            )}
+          </div>
           <div className="sidebar-brand">
             <h1>Govi Sewana</h1>
             <p>Agribusiness POS</p>
@@ -347,6 +415,63 @@ export default function Sidebar() {
           )}
         </div>
       </aside>
+
+      {/* Logo Upload Modal */}
+      {showLogoUpload && (
+        <div className="modal-overlay" onClick={() => !uploadingLogo && setShowLogoUpload(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '24px' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 700 }}>Upload Logo</h3>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 500 }}>
+                  Select Logo Image
+                </label>
+                <input
+                  ref={logoFileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLogoUpload(file);
+                  }}
+                  disabled={uploadingLogo}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    background: 'var(--bg-input)',
+                  }}
+                />
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  PNG, JPG, or GIF. Recommended size: 100x100px or larger.
+                </p>
+              </div>
+
+              {logoUrl && (
+                <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>Current logo:</p>
+                  <img src={logoUrl} alt="Current Logo" style={{ maxWidth: '80px', maxHeight: '80px', borderRadius: '8px' }} />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowLogoUpload(false)}
+                  disabled={uploadingLogo}
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '14px' }}
+                >
+                  {uploadingLogo ? 'Uploading...' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
