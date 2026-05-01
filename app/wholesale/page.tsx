@@ -185,7 +185,7 @@ export default function WholesalePage() {
           refreshCredits();
         }
 
-        generateReceipt(sale);
+        generateReceipt(sale).catch(console.error);
         
         if (sendWhatsApp) {
           const waText = [

@@ -141,7 +141,7 @@ export default function RetailPage() {
 
       if (res.ok) {
         const sale = await res.json();
-        generateReceipt(sale);
+        await generateReceipt(sale);
         
         if (sendWhatsApp) {
           const text = [

@@ -152,8 +152,8 @@ export default function ReportsPage() {
     }
   };
 
-  const handleDownloadReport = () => {
-    generateReport({
+  const handleDownloadReport = async () => {
+    await generateReport({
       title: `${period.charAt(0).toUpperCase() + period.slice(1)} Report`,
       period: getPeriodLabel(),
       revenue: totalRevenue,
@@ -431,7 +431,7 @@ export default function ReportsPage() {
                           <button
                             className="btn btn-secondary"
                             style={{ padding: '4px 8px', fontSize: '12px' }}
-                            onClick={() => generateReceipt(sale as any)}
+                            onClick={() => generateReceipt(sale as any).catch(console.error)}
                             title="Download Receipt"
                           >
                             📥 Receipt
