@@ -23,6 +23,7 @@ interface Quotation {
   items: QuotationItem[];
   subtotal: number;
   discount: number;
+  other: number;
   total: number;
   notes: string;
   validUntil: string;
@@ -52,6 +53,7 @@ export default function QuotationsPage() {
     items: [],
     subtotal: 0,
     discount: 0,
+    other: 0,
     total: 0,
     notes: '',
     validUntil: '',
@@ -114,7 +116,7 @@ export default function QuotationsPage() {
 
     const updatedItems = [...formData.items, newItem];
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-    const total = subtotal - (formData.discount || 0);
+    const total = subtotal - (formData.discount || 0) + (formData.other || 0);
 
     setFormData({
       ...formData,
@@ -141,7 +143,7 @@ export default function QuotationsPage() {
 
     const updatedItems = [...formData.items, newItem];
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-    const total = subtotal - (formData.discount || 0);
+    const total = subtotal - (formData.discount || 0) + (formData.other || 0);
 
     setFormData({
       ...formData,
@@ -157,7 +159,7 @@ export default function QuotationsPage() {
   const removeItem = (index: number) => {
     const updatedItems = formData.items.filter((_, i) => i !== index);
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-    const total = subtotal - (formData.discount || 0);
+    const total = subtotal - (formData.discount || 0) + (formData.other || 0);
 
     setFormData({
       ...formData,
@@ -168,8 +170,13 @@ export default function QuotationsPage() {
   };
 
   const updateDiscount = (newDiscount: number) => {
-    const total = formData.subtotal - newDiscount;
+    const total = formData.subtotal - newDiscount + (formData.other || 0);
     setFormData({ ...formData, discount: newDiscount, total });
+  };
+
+  const updateOther = (newOther: number) => {
+    const total = formData.subtotal - (formData.discount || 0) + newOther;
+    setFormData({ ...formData, other: newOther, total });
   };
 
   const handleSaveQuotation = async () => {
@@ -199,6 +206,7 @@ export default function QuotationsPage() {
           items: [],
           subtotal: 0,
           discount: 0,
+          other: 0,
           total: 0,
           notes: '',
           validUntil: '',
@@ -221,6 +229,12 @@ export default function QuotationsPage() {
       alert('Failed to save quotation');
       console.error(error);
     }
+  };
+
+  const handleEditQuotation = (quotation: Quotation) => {
+    setFormData(quotation);
+    setActiveTab('create');
+    window.scrollTo(0, 0);
   };
 
   const handleGeneratePDF = async (quotation: Quotation) => {
@@ -421,6 +435,24 @@ export default function QuotationsPage() {
 
                     {/* Footer */}
                     <div style={{ display: 'flex', gap: '10px', padding: '12px', borderTop: '1px solid var(--border-color)', background: 'rgba(16, 185, 129, 0.05)' }}>
+                      {quotation.status === 'draft' && (
+                        <button
+                          onClick={() => handleEditQuotation(quotation)}
+                          style={{
+                            flex: 1,
+                            padding: '8px',
+                            background: 'var(--info)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 'var(--radius-md)',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '12px'
+                          }}
+                        >
+                          ✎ Edit
+                        </button>
+                      )}
                       <button
                         onClick={() => handleGeneratePDF(quotation)}
                         style={{
@@ -452,7 +484,14 @@ export default function QuotationsPage() {
             <div>
               {/* Customer Info */}
               <div style={{ background: 'var(--bg-card)', padding: '20px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--border-color)', marginBottom: '20px' }}>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)' }}>👤 Customer</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: 0, marginBottom: 0, color: 'var(--text-primary)' }}>👤 Customer</h2>
+                  {formData._id && (
+                    <span style={{ fontSize: '12px', color: 'var(--warning)', fontWeight: 600, background: 'var(--warning-soft)', padding: '4px 8px', borderRadius: 'var(--radius-md)' }}>
+                      Editing: {formData.quotationNo}
+                    </span>
+                  )}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Name *</label>
@@ -792,6 +831,27 @@ export default function QuotationsPage() {
                   />
                 </div>
 
+                <div style={{ marginBottom: '15px', background: 'var(--bg-input)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Other Charges</label>
+                  <input
+                    type="number"
+                    value={formData.other}
+                    onChange={(e) => updateOther(parseFloat(e.target.value) || 0)}
+                    min="0"
+                    step="0.01"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      background: 'var(--bg-card)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
                 <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '15px', borderRadius: 'var(--radius-md)', border: '2px solid var(--emerald-500)', marginBottom: '20px' }}>
                   <p style={{ fontSize: '12px', color: 'var(--emerald-400)', fontWeight: 600, margin: 0, marginBottom: '8px' }}>TOTAL</p>
                   <p style={{ fontSize: '28px', fontWeight: 700, color: 'var(--emerald-400)', margin: 0 }}>{formatLKR(formData.total)}</p>
@@ -834,7 +894,6 @@ export default function QuotationsPage() {
                   </button>
                   <button
                     onClick={() => {
-                      setActiveTab('view');
                       setFormData({
                         quotationNo: '',
                         customerName: '',
@@ -844,6 +903,7 @@ export default function QuotationsPage() {
                         items: [],
                         subtotal: 0,
                         discount: 0,
+                        other: 0,
                         total: 0,
                         notes: '',
                         validUntil: '',
@@ -854,6 +914,7 @@ export default function QuotationsPage() {
                       setManualItemPrice('');
                       setSelectedProduct('');
                       setSelectedQty('1');
+                      setActiveTab('view');
                     }}
                     style={{
                       padding: '12px',

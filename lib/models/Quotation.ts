@@ -19,6 +19,7 @@ const QuotationSchema = new Schema(
     ],
     subtotal: Number,
     discount: Number,
+    other: { type: Number, default: 0 },
     total: Number,
     notes: String,
     validUntil: String,

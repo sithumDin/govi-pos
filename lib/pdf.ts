@@ -5,7 +5,7 @@ import { Sale } from './types';
 const COMPANY = {
   name: 'GOVI SEWANA',
   tagline: 'Agro Solution',
-  address: 'Govi Sewana Agro Solutions',
+  address: 'Hendiyagala Sandalankawa',
   phone1: '076 821 6062',
   phone2: '071 055 6068',
   country: 'Sri Lanka',
