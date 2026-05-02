@@ -31,13 +31,19 @@ export default function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
-    // Load logo on mount
-    fetch('/api/logo')
-      .then(res => res.json())
-      .then(data => {
-        if (data.url) setLogoUrl(data.url);
-      })
-      .catch(console.error);
+    // Check if logo exists
+    const checkLogo = async () => {
+      try {
+        const res = await fetch('/api/logo');
+        if (res.headers.get('content-type')?.includes('image')) {
+          // Logo exists and is served as an image, use the endpoint as src
+          setLogoUrl('/api/logo');
+        }
+      } catch (error) {
+        console.error('Failed to check logo:', error);
+      }
+    };
+    checkLogo();
   }, []);
 
   useEffect(() => {
