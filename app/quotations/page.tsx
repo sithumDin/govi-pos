@@ -222,7 +222,9 @@ export default function QuotationsPage() {
       console.log('API Response:', { ok: res.ok, status: res.status, data: responseData });
 
       if (!res.ok) {
-        throw new Error(responseData.error || responseData.details || 'Failed to save quotation');
+        const errorMessage = responseData.error || responseData.details || 'Failed to save quotation';
+        const errorDetails = responseData.details ? ` (${responseData.details})` : '';
+        throw new Error(errorMessage + errorDetails);
       }
 
       alert('Quotation saved successfully');
