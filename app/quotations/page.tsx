@@ -39,7 +39,6 @@ export default function QuotationsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'view'>('view');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'accepted' | 'rejected'>('all');
@@ -62,6 +61,8 @@ export default function QuotationsPage() {
 
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [selectedQty, setSelectedQty] = useState('1');
+  const [manualItemName, setManualItemName] = useState('');
+  const [manualItemPrice, setManualItemPrice] = useState('');
 
   // Fetch products and quotations
   useEffect(() => {
@@ -126,6 +127,33 @@ export default function QuotationsPage() {
     setSelectedQty('1');
   };
 
+  const addManualItem = () => {
+    if (!manualItemName.trim() || !manualItemPrice) return;
+
+    const newItem: QuotationItem = {
+      product: 'manual-' + Date.now(),
+      productName: manualItemName.trim(),
+      qty: 1,
+      unitPrice: parseFloat(manualItemPrice),
+      unit: '',
+      total: parseFloat(manualItemPrice),
+    };
+
+    const updatedItems = [...formData.items, newItem];
+    const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+    const total = subtotal - (formData.discount || 0);
+
+    setFormData({
+      ...formData,
+      items: updatedItems,
+      subtotal,
+      total,
+    });
+
+    setManualItemName('');
+    setManualItemPrice('');
+  };
+
   const removeItem = (index: number) => {
     const updatedItems = formData.items.filter((_, i) => i !== index);
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
@@ -177,7 +205,10 @@ export default function QuotationsPage() {
           quotationType: 'retail',
           status: 'draft',
         });
-        setShowForm(false);
+        setSelectedProduct('');
+        setSelectedQty('1');
+        setManualItemName('');
+        setManualItemPrice('');
         
         // Refresh quotations
         const quotationsRes = await fetch('/api/quotations');
@@ -204,323 +235,641 @@ export default function QuotationsPage() {
     return matchesSearch && matchesStatus;
   });
 
+
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="text-lg text-gray-600">Loading...</div>
-      </div>
-    );
+    return <div className="loading-spinner"><div className="spinner" /></div>;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-green-800 mb-2">Quotations</h1>
-          <p className="text-gray-600">Create and manage quotations for your customers</p>
-        </div>
+    <div className="animate-fade-in">
+      <div className="page-header">
+        <h1>📄 Quotations</h1>
+        <p>Create and manage quotations for your customers</p>
+      </div>
 
+      <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
         {/* Tabs */}
-        <div className="flex gap-4 mb-6">
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
           <button
             onClick={() => setActiveTab('view')}
-            className={`px-6 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'view'
-                ? 'bg-green-600 text-white shadow-lg'
-                : 'bg-white text-gray-700 border border-gray-200 hover:border-green-300'
-            }`}
+            style={{
+              padding: '10px 20px',
+              background: activeTab === 'view' ? 'var(--emerald-500)' : 'var(--bg-card)',
+              color: activeTab === 'view' ? '#fff' : 'var(--text-primary)',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '16px'
+            }}
           >
-            View Quotations
+            📋 View Quotations
           </button>
           <button
             onClick={() => setActiveTab('create')}
-            className={`px-6 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'create'
-                ? 'bg-green-600 text-white shadow-lg'
-                : 'bg-white text-gray-700 border border-gray-200 hover:border-green-300'
-            }`}
+            style={{
+              padding: '10px 20px',
+              background: activeTab === 'create' ? 'var(--emerald-500)' : 'var(--bg-card)',
+              color: activeTab === 'create' ? '#fff' : 'var(--text-primary)',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '16px'
+            }}
           >
-            Create Quotation
+            ✎ Create New
           </button>
         </div>
 
-        {/* View Quotations Tab */}
+        {/* View Quotations */}
         {activeTab === 'view' && (
-          <div className="space-y-4">
+          <div>
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
               <input
                 type="text"
-                placeholder="Search by customer name or quotation number..."
+                placeholder="🔍 Search customer name or quotation #..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                style={{
+                  padding: '10px 15px',
+                  background: 'var(--bg-input)',
+                  color: 'var(--text-primary)',
+                  border: '2px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '14px'
+                }}
               />
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                style={{
+                  padding: '10px 15px',
+                  background: 'var(--bg-input)',
+                  color: 'var(--text-primary)',
+                  border: '2px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
               >
-                <option value="all">All Status</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="accepted">Accepted</option>
-                <option value="rejected">Rejected</option>
+                <option value="all">📊 All Status</option>
+                <option value="draft">📝 Draft</option>
+                <option value="sent">📧 Sent</option>
+                <option value="accepted">✅ Accepted</option>
+                <option value="rejected">❌ Rejected</option>
               </select>
             </div>
 
             {/* Quotations List */}
-            <div className="space-y-3">
-              {filteredQuotations.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                  <p className="text-gray-500">No quotations found</p>
-                </div>
-              ) : (
-                filteredQuotations.map((quotation) => (
+            {filteredQuotations.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '60px 20px',
+                background: 'var(--bg-card)',
+                borderRadius: 'var(--radius-lg)',
+                border: '2px dashed var(--border-color)'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '20px' }}>📭</div>
+                <p style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>No quotations found</p>
+                <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '10px' }}>Try adjusting your search criteria or create a new quotation</p>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+                gap: '20px'
+              }}>
+                {filteredQuotations.map((quotation) => (
                   <div
                     key={quotation._id}
-                    className="bg-white p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
+                    style={{
+                      background: 'var(--bg-card)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-lg)',
+                      overflow: 'hidden',
+                      transition: 'all var(--transition-base)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--emerald-500)';
+                      e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-color)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-3">
-                      <div>
-                        <p className="text-sm text-gray-600">Quotation #</p>
-                        <p className="font-semibold text-green-700">{quotation.quotationNo}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Customer</p>
-                        <p className="font-medium">{quotation.customerName}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Total</p>
-                        <p className="font-semibold text-lg">{formatLKR(quotation.total)}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Status</p>
-                        <span
-                          className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                            quotation.status === 'draft'
-                              ? 'bg-gray-100 text-gray-700'
-                              : quotation.status === 'sent'
-                              ? 'bg-blue-100 text-blue-700'
-                              : quotation.status === 'accepted'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}
-                        >
+                    {/* Card Header */}
+                    <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div>
+                          <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>QUOTATION</p>
+                          <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--emerald-400)', margin: '5px 0 0 0' }}>{quotation.quotationNo}</h3>
+                        </div>
+                        <span style={{
+                          padding: '6px 12px',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          background: quotation.status === 'draft' ? 'var(--warning-soft)' : 
+                                     quotation.status === 'sent' ? 'var(--info-soft)' :
+                                     quotation.status === 'accepted' ? 'var(--success-soft)' :
+                                     'var(--danger-soft)',
+                          color: quotation.status === 'draft' ? 'var(--warning)' :
+                                quotation.status === 'sent' ? 'var(--info)' :
+                                quotation.status === 'accepted' ? 'var(--success)' :
+                                'var(--danger)'
+                        }}>
                           {quotation.status}
                         </span>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleGeneratePDF(quotation)}
-                          className="flex-1 bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 transition text-sm font-medium"
-                        >
-                          PDF
-                        </button>
+                    </div>
+
+                    {/* Card Body */}
+                    <div style={{ padding: '16px', fontSize: '14px' }}>
+                      <div style={{ marginBottom: '12px' }}>
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, margin: 0, marginBottom: '4px' }}>CUSTOMER</p>
+                        <p style={{ fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{quotation.customerName}</p>
+                        {quotation.customerPhone && <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>📱 {quotation.customerPhone}</p>}
+                      </div>
+
+                      {/* Items */}
+                      <div style={{ marginBottom: '12px', padding: '10px', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}>
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, margin: '0 0 8px 0' }}>ITEMS ({quotation.items.length})</p>
+                        {quotation.items.slice(0, 3).map((item, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            <span>{item.productName}</span>
+                            <span>{item.qty}x</span>
+                          </div>
+                        ))}
+                        {quotation.items.length > 3 && <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '8px 0 0 0', textAlign: 'center' }}>+{quotation.items.length - 3} more</p>}
+                      </div>
+
+                      {/* Totals */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                        <div>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, marginBottom: '4px' }}>Subtotal</p>
+                          <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{formatLKR(quotation.subtotal)}</p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, marginBottom: '4px' }}>Total</p>
+                          <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--emerald-400)', margin: 0 }}>{formatLKR(quotation.total)}</p>
+                        </div>
                       </div>
                     </div>
-                    {quotation.customerPhone && (
-                      <p className="text-sm text-gray-600">📱 {quotation.customerPhone}</p>
-                    )}
+
+                    {/* Footer */}
+                    <div style={{ display: 'flex', gap: '10px', padding: '12px', borderTop: '1px solid var(--border-color)', background: 'rgba(16, 185, 129, 0.05)' }}>
+                      <button
+                        onClick={() => handleGeneratePDF(quotation)}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          background: 'var(--emerald-500)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 'var(--radius-md)',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: '12px'
+                        }}
+                      >
+                        📥 PDF
+                      </button>
+                    </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Create Quotation Tab */}
+        {/* Create Quotation */}
         {activeTab === 'create' && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {/* Customer Information */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-700 mb-4">Customer Information</h3>
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Customer Name *"
-                    value={formData.customerName}
-                    onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="Phone Number"
-                    value={formData.customerPhone}
-                    onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={formData.customerEmail}
-                    onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Address"
-                    value={formData.customerAddress}
-                    onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '20px' }}>
+            {/* Form */}
+            <div>
+              {/* Customer Info */}
+              <div style={{ background: 'var(--bg-card)', padding: '20px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--border-color)', marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)' }}>👤 Customer</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Name *</label>
+                    <input
+                      type="text"
+                      value={formData.customerName}
+                      onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                      placeholder="Customer name"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.customerPhone}
+                      onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                      placeholder="+94 xx xxx xxxx"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Email</label>
+                    <input
+                      type="email"
+                      value={formData.customerEmail}
+                      onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                      placeholder="customer@example.com"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Address</label>
+                    <input
+                      type="text"
+                      value={formData.customerAddress}
+                      onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                      placeholder="Address"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Quotation Settings */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-700 mb-4">Quotation Settings</h3>
-                <div className="space-y-3">
-                  <select
-                    value={formData.quotationType}
-                    onChange={(e) => setFormData({ ...formData, quotationType: e.target.value as 'retail' | 'wholesale' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="retail">Retail</option>
-                    <option value="wholesale">Wholesale</option>
-                  </select>
-                  <input
-                    type="date"
-                    value={formData.validUntil}
-                    onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="sent">Sent</option>
-                    <option value="accepted">Accepted</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+              {/* Settings */}
+              <div style={{ background: 'var(--bg-card)', padding: '20px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--border-color)', marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)' }}>⚙️ Settings</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Type</label>
+                    <select
+                      value={formData.quotationType}
+                      onChange={(e) => setFormData({ ...formData, quotationType: e.target.value as 'retail' | 'wholesale' })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="retail">🛒 Retail</option>
+                      <option value="wholesale">🏭 Wholesale</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Valid Until</label>
+                    <input
+                      type="date"
+                      value={formData.validUntil}
+                      onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="draft">📝 Draft</option>
+                      <option value="sent">📧 Sent</option>
+                      <option value="accepted">✅ Accepted</option>
+                      <option value="rejected">❌ Rejected</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Add Products */}
-            <div className="mb-8 p-4 bg-green-50 rounded-lg border border-green-200">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Add Products</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <select
-                  value={selectedProduct}
-                  onChange={(e) => setSelectedProduct(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="">Select Product</option>
-                  {products.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  placeholder="Quantity"
-                  value={selectedQty}
-                  onChange={(e) => setSelectedQty(e.target.value)}
-                  min="1"
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-                <button
-                  onClick={addItemToQuotation}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-medium"
-                >
-                  Add Item
-                </button>
-              </div>
-            </div>
-
-            {/* Items Table */}
-            {formData.items.length > 0 && (
-              <div className="mb-8 overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-green-600 text-white">
-                      <th className="px-4 py-2 text-left">Product</th>
-                      <th className="px-4 py-2 text-center">Qty</th>
-                      <th className="px-4 py-2 text-center">Unit</th>
-                      <th className="px-4 py-2 text-right">Unit Price</th>
-                      <th className="px-4 py-2 text-right">Total</th>
-                      <th className="px-4 py-2 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.items.map((item, index) => (
-                      <tr key={index} className="border-b border-gray-200 hover:bg-green-50">
-                        <td className="px-4 py-2">{item.productName}</td>
-                        <td className="px-4 py-2 text-center">{item.qty}</td>
-                        <td className="px-4 py-2 text-center">{item.unit}</td>
-                        <td className="px-4 py-2 text-right">{formatLKR(item.unitPrice)}</td>
-                        <td className="px-4 py-2 text-right font-semibold">{formatLKR(item.total)}</td>
-                        <td className="px-4 py-2 text-center">
-                          <button
-                            onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
+              {/* Add Products */}
+              <div style={{ background: 'var(--bg-card)', padding: '20px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--border-color)', marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)' }}>📦 Add Products</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+                  <select
+                    value={selectedProduct}
+                    onChange={(e) => setSelectedProduct(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--bg-input)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
+                      fontSize: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Select product...</option>
+                    {products.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Summary */}
-            <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Subtotal</p>
-                  <p className="text-2xl font-bold text-gray-800">{formatLKR(formData.subtotal)}</p>
+                  </select>
+                  <input
+                    type="number"
+                    value={selectedQty}
+                    onChange={(e) => setSelectedQty(e.target.value)}
+                    min="1"
+                    placeholder="Qty"
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--bg-input)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
+                      fontSize: '14px'
+                    }}
+                  />
+                  <button
+                    onClick={addItemToQuotation}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--emerald-500)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '14px'
+                    }}
+                  >
+                    ➕ Add
+                  </button>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Discount</p>
+
+                {/* Manual Items */}
+                <div style={{ borderTop: '2px solid var(--border-color)', paddingTop: '15px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '10px' }}>Add Manual Items (Transport, Delivery, etc.)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '10px' }}>
+                    <input
+                      type="text"
+                      value={manualItemName}
+                      onChange={(e) => setManualItemName(e.target.value)}
+                      placeholder="Item name (e.g., Transport, Delivery Fee)"
+                      style={{
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <input
+                      type="number"
+                      value={manualItemPrice}
+                      onChange={(e) => setManualItemPrice(e.target.value)}
+                      placeholder="Price"
+                      step="0.01"
+                      style={{
+                        padding: '8px 12px',
+                        background: 'var(--bg-input)',
+                        border: '2px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <button
+                      onClick={addManualItem}
+                      style={{
+                        padding: '8px 12px',
+                        background: 'var(--warning)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '14px'
+                      }}
+                    >
+                      ✏️ Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              {formData.items.length > 0 && (
+                <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '2px solid var(--border-color)', overflow: 'hidden', marginBottom: '20px' }}>
+                  <div style={{ padding: '15px 20px', borderBottom: '2px solid var(--border-color)', fontWeight: 700, fontSize: '16px' }}>
+                    📋 Items ({formData.items.length})
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--bg-input)' }}>
+                          <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Product</th>
+                          <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Qty</th>
+                          <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Unit</th>
+                          <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Price</th>
+                          <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Total</th>
+                          <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formData.items.map((item, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '10px', fontSize: '13px' }}>{item.productName}</td>
+                            <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{item.qty}</td>
+                            <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{item.unit}</td>
+                            <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>{formatLKR(item.unitPrice)}</td>
+                            <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: 'var(--emerald-400)' }}>{formatLKR(item.total)}</td>
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => removeItem(i)}
+                                style={{
+                                  background: 'var(--danger-soft)',
+                                  color: 'var(--danger)',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  padding: '4px 8px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px',
+                                  fontWeight: 600
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Summary Sidebar */}
+            <div>
+              <div style={{ background: 'var(--bg-card)', padding: '20px', borderRadius: 'var(--radius-lg)', border: '2px solid var(--border-color)', position: 'sticky', top: '20px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)' }}>💰 Summary</h2>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, marginBottom: '4px' }}>Subtotal</p>
+                  <p style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{formatLKR(formData.subtotal)}</p>
+                </div>
+
+                <div style={{ marginBottom: '15px', background: 'var(--bg-input)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Discount</label>
                   <input
                     type="number"
                     value={formData.discount}
                     onChange={(e) => updateDiscount(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-1 border border-gray-300 rounded"
                     min="0"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      background: 'var(--bg-card)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
                   />
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Total</p>
-                  <p className="text-2xl font-bold text-green-600">{formatLKR(formData.total)}</p>
+
+                <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '15px', borderRadius: 'var(--radius-md)', border: '2px solid var(--emerald-500)', marginBottom: '20px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--emerald-400)', fontWeight: 600, margin: 0, marginBottom: '8px' }}>TOTAL</p>
+                  <p style={{ fontSize: '28px', fontWeight: 700, color: 'var(--emerald-400)', margin: 0 }}>{formatLKR(formData.total)}</p>
+                </div>
+
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Terms & notes..."
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    background: 'var(--bg-input)',
+                    border: '2px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px',
+                    minHeight: '100px',
+                    boxSizing: 'border-box',
+                    resize: 'vertical'
+                  }}
+                />
+
+                <div style={{ display: 'grid', gap: '10px', marginTop: '20px' }}>
+                  <button
+                    onClick={handleSaveQuotation}
+                    style={{
+                      padding: '12px',
+                      background: 'var(--emerald-500)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '14px'
+                    }}
+                  >
+                    ✓ Save & PDF
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('view');
+                      setFormData({
+                        quotationNo: '',
+                        customerName: '',
+                        customerPhone: '',
+                        customerEmail: '',
+                        customerAddress: '',
+                        items: [],
+                        subtotal: 0,
+                        discount: 0,
+                        total: 0,
+                        notes: '',
+                        validUntil: '',
+                        quotationType: 'retail',
+                        status: 'draft',
+                      });
+                      setManualItemName('');
+                      setManualItemPrice('');
+                      setSelectedProduct('');
+                      setSelectedQty('1');
+                    }}
+                    style={{
+                      padding: '12px',
+                      background: 'var(--bg-input)',
+                      color: 'var(--text-primary)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '14px'
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
-            </div>
-
-            {/* Notes */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Notes/Terms</label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Add any additional notes or terms..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-4">
-              <button
-                onClick={handleSaveQuotation}
-                className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-semibold text-lg"
-              >
-                Save & Generate PDF
-              </button>
-              <button
-                onClick={() => setActiveTab('view')}
-                className="flex-1 bg-gray-400 text-white px-6 py-3 rounded-lg hover:bg-gray-500 transition font-semibold"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         )}
