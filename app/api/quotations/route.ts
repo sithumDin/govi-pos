@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
 
     return Response.json(quotation, { status: 201 });
   } catch (error) {
-    return Response.json({ error: 'Failed to create quotation' }, { status: 500 });
+    console.error('POST error:', error);
+    return Response.json({ error: 'Failed to create quotation', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
 
@@ -78,10 +79,20 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { _id, ...data } = body;
 
+    if (!_id) {
+      return Response.json({ error: 'Quotation ID is required' }, { status: 400 });
+    }
+
     const quotation = await Quotation.findByIdAndUpdate(_id, data, { new: true });
+    
+    if (!quotation) {
+      return Response.json({ error: 'Quotation not found' }, { status: 404 });
+    }
+
     return Response.json(quotation);
   } catch (error) {
-    return Response.json({ error: 'Failed to update quotation' }, { status: 500 });
+    console.error('PUT error:', error);
+    return Response.json({ error: 'Failed to update quotation', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
 

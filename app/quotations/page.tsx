@@ -192,42 +192,57 @@ export default function QuotationsPage() {
         body: JSON.stringify(formData),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        alert('Quotation saved successfully');
-        
-        // Reset form
-        setFormData({
-          quotationNo: '',
-          customerName: '',
-          customerPhone: '',
-          customerEmail: '',
-          customerAddress: '',
-          items: [],
-          subtotal: 0,
-          discount: 0,
-          other: 0,
-          total: 0,
-          notes: '',
-          validUntil: '',
-          quotationType: 'retail',
-          status: 'draft',
-        });
-        setSelectedProduct('');
-        setSelectedQty('1');
-        setManualItemName('');
-        setManualItemPrice('');
-        
-        // Refresh quotations
-        const quotationsRes = await fetch('/api/quotations');
-        if (quotationsRes.ok) {
-          const quotationsData = await quotationsRes.json();
-          setQuotations(Array.isArray(quotationsData) ? quotationsData : []);
-        }
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to save quotation');
       }
+
+      const data = await res.json();
+      console.log('Quotation saved:', data);
+      
+      alert('Quotation saved successfully');
+      
+      // Generate PDF with the saved data
+      try {
+        await generateQuotation(data);
+      } catch (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        alert('Quotation saved but PDF generation failed. You can generate it later.');
+      }
+      
+      // Reset form
+      setFormData({
+        quotationNo: '',
+        customerName: '',
+        customerPhone: '',
+        customerEmail: '',
+        customerAddress: '',
+        items: [],
+        subtotal: 0,
+        discount: 0,
+        other: 0,
+        total: 0,
+        notes: '',
+        validUntil: '',
+        quotationType: 'retail',
+        status: 'draft',
+      });
+      setSelectedProduct('');
+      setSelectedQty('1');
+      setManualItemName('');
+      setManualItemPrice('');
+      
+      // Refresh quotations
+      const quotationsRes = await fetch('/api/quotations');
+      if (quotationsRes.ok) {
+        const quotationsData = await quotationsRes.json();
+        setQuotations(Array.isArray(quotationsData) ? quotationsData : []);
+      }
+      
+      setActiveTab('view');
     } catch (error) {
-      alert('Failed to save quotation');
-      console.error(error);
+      console.error('Save error:', error);
+      alert(`Failed to save quotation: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -878,6 +893,7 @@ export default function QuotationsPage() {
 
                 <div style={{ display: 'grid', gap: '10px', marginTop: '20px' }}>
                   <button
+                    type="button"
                     onClick={handleSaveQuotation}
                     style={{
                       padding: '12px',
@@ -887,7 +903,9 @@ export default function QuotationsPage() {
                       borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                       fontWeight: 600,
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      opacity: 1,
+                      pointerEvents: 'auto'
                     }}
                   >
                     ✓ Save & PDF
