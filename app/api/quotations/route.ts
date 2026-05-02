@@ -83,16 +83,24 @@ export async function PUT(request: NextRequest) {
       return Response.json({ error: 'Quotation ID is required' }, { status: 400 });
     }
 
-    const quotation = await Quotation.findByIdAndUpdate(_id, data, { new: true });
+    console.log('Updating quotation:', { _id, dataKeys: Object.keys(data) });
+
+    const quotation = await Quotation.findByIdAndUpdate(_id, data, { new: true, runValidators: false });
     
     if (!quotation) {
-      return Response.json({ error: 'Quotation not found' }, { status: 404 });
+      return Response.json({ error: 'Quotation not found', details: `ID: ${_id}` }, { status: 404 });
     }
 
+    console.log('Quotation updated successfully');
     return Response.json(quotation);
   } catch (error) {
     console.error('PUT error:', error);
-    return Response.json({ error: 'Failed to update quotation', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return Response.json({ 
+      error: 'Failed to update quotation', 
+      details: errorMessage,
+      type: error instanceof Error ? error.constructor.name : 'Unknown'
+    }, { status: 500 });
   }
 }
 

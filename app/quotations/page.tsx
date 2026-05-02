@@ -186,28 +186,53 @@ export default function QuotationsPage() {
     }
 
     try {
-      const res = await fetch('/api/quotations', {
-        method: formData._id ? 'PUT' : 'POST',
+      const isUpdate = !!formData._id;
+      console.log('Saving quotation', { isUpdate, _id: formData._id, customerName: formData.customerName });
+
+      const endpoint = '/api/quotations';
+      const method = isUpdate ? 'PUT' : 'POST';
+
+      // For updates, exclude read-only fields
+      const dataToSend = isUpdate 
+        ? {
+            _id: formData._id,
+            customerName: formData.customerName,
+            customerPhone: formData.customerPhone,
+            customerEmail: formData.customerEmail,
+            customerAddress: formData.customerAddress,
+            items: formData.items,
+            subtotal: formData.subtotal,
+            discount: formData.discount,
+            other: formData.other,
+            total: formData.total,
+            notes: formData.notes,
+            validUntil: formData.validUntil,
+            quotationType: formData.quotationType,
+            status: formData.status,
+          }
+        : formData;
+
+      const res = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(dataToSend),
       });
 
+      const responseData = await res.json();
+      console.log('API Response:', { ok: res.ok, status: res.status, data: responseData });
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to save quotation');
+        throw new Error(responseData.error || responseData.details || 'Failed to save quotation');
       }
 
-      const data = await res.json();
-      console.log('Quotation saved:', data);
-      
       alert('Quotation saved successfully');
       
       // Generate PDF with the saved data
       try {
-        await generateQuotation(data);
+        await generateQuotation(responseData);
       } catch (pdfError) {
         console.error('PDF generation error:', pdfError);
-        alert('Quotation saved but PDF generation failed. You can generate it later.');
+        // Don't alert for PDF errors, just log
       }
       
       // Reset form
@@ -241,8 +266,9 @@ export default function QuotationsPage() {
       
       setActiveTab('view');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Save error:', error);
-      alert(`Failed to save quotation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      alert(`Failed to save quotation: ${errorMessage}`);
     }
   };
 
