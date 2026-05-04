@@ -38,6 +38,8 @@ export interface Sale {
   items: SaleItem[];
   subtotal: number;
   discount: number;
+  otherCharges: number;
+  otherChargesDescription?: string;
   total: number;
   profit: number;
   paymentMethod: 'cash' | 'card' | 'transfer';

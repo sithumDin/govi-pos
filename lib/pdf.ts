@@ -1,6 +1,32 @@
 import jsPDF from 'jspdf';
 import { Sale } from './types';
 
+// ─── IMAGE COMPRESSION HELPER ─────────────────────────────────────────────
+async function compressImage(base64String: string, maxWidth: number = 500, quality: number = 0.7): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      // Resize if larger than maxWidth
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(base64String); // fallback
+    img.src = base64String;
+  });
+}
+
 // Company Details
 const COMPANY = {
   name: 'GOVI SEWANA',
@@ -49,11 +75,13 @@ async function getLogoAsBase64(): Promise<string | null> {
 
       if (contentType.includes('image/')) {
         const blob = await response.blob();
-        return new Promise((resolve) => {
+        const base64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.readAsDataURL(blob);
         });
+        // Compress the image before returning
+        return await compressImage(base64, 400, 0.6);
       }
 
       const data = await response.json();
@@ -61,11 +89,13 @@ async function getLogoAsBase64(): Promise<string | null> {
         const img = await fetch(data.url);
         if (!img.ok) continue;
         const blob = await img.blob();
-        return new Promise((resolve) => {
+        const base64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.readAsDataURL(blob);
         });
+        // Compress the image before returning
+        return await compressImage(base64, 400, 0.6);
       }
     }
   } catch (error) {
@@ -152,7 +182,7 @@ function addHeaderWithBranding(doc: jsPDF, w: number, y: number) {
 }
 
 export async function generateReceipt(sale: Sale) {
-  const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+  const doc = new jsPDF({ unit: 'mm', format: [80, 200], compress: true });
   const w = 80;
   let y = 6;
   const isWholesale = sale.saleType === 'wholesale';
@@ -160,18 +190,19 @@ export async function generateReceipt(sale: Sale) {
   const receiptSubtitle = isWholesale ? 'Business Supply / Credit Sale' : 'Customer Purchase Receipt';
   const footerLine = isWholesale ? 'Thank you for your wholesale business!' : 'Thank you for your purchase!';
 
-  // Try to load logo
+  // Try to load and compress logo
   let logoBase64: string | null = null;
   try {
     if (typeof window !== 'undefined') {
       const response = await fetch('/api/logo');
       if (response.ok) {
         const blob = await response.blob();
-        logoBase64 = await new Promise((resolve) => {
+        const base64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.readAsDataURL(blob);
         });
+        logoBase64 = await compressImage(base64, 300, 0.5);
       }
     }
   } catch (error) {
@@ -289,18 +320,34 @@ export async function generateReceipt(sale: Sale) {
   doc.text(`LKR ${sale.subtotal.toFixed(2)}`, w - 5, y, { align: 'right' });
   y += 4;
 
-  if (sale.discount > 0) {
+  if (sale.discount && sale.discount > 0) {
     doc.text('Discount:', 5, y);
     doc.text(`-LKR ${sale.discount.toFixed(2)}`, w - 5, y, { align: 'right' });
     y += 4;
   }
+
+  const expectedSubtotal = sale.subtotal - (sale.discount || 0);
+  const effectiveOther = Math.max(0, sale.total - expectedSubtotal);
+
+  if (effectiveOther > 0.005) {
+    const chargeLabel = sale.otherChargesDescription?.trim() || 'Other Charges';
+    doc.text(`${chargeLabel}:`, 5, y);
+    doc.text(`+LKR ${effectiveOther.toFixed(2)}`, w - 5, y, { align: 'right' });
+    y += 4;
+  }
+
+  y += 2;
+  doc.setDrawColor(40, 120, 60);
+  doc.setLineWidth(0.5);
+  doc.line(5, y, w - 5, y);
+  y += 3;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(40, 120, 60);
   doc.text('TOTAL:', 5, y);
   doc.text(`LKR ${sale.total.toFixed(2)}`, w - 5, y, { align: 'right' });
-  y += 7;
+
 
   doc.setDrawColor(40, 120, 60);
   doc.setLineWidth(0.4);
@@ -378,21 +425,22 @@ export async function generateReport(data: {
   adminProfit: number;
   adminPerformance: Array<{ name: string; salesCount: number; profit: number }>;
 }) {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ compress: true });
   let y = 20;
 
-  // Try to load logo
+  // Try to load and compress logo
   let logoBase64: string | null = null;
   try {
     if (typeof window !== 'undefined') {
       const response = await fetch('/api/logo');
       if (response.ok) {
         const blob = await response.blob();
-        logoBase64 = await new Promise((resolve) => {
+        const base64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.readAsDataURL(blob);
         });
+        logoBase64 = await compressImage(base64, 300, 0.5);
       }
     }
   } catch (error) {
@@ -526,7 +574,7 @@ export async function generateReport(data: {
 }
 
 export async function generateQuotation(quotation: any) {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ compress: true });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 15;
@@ -696,6 +744,19 @@ export async function generateQuotation(quotation: any) {
   if (quotation.discount > 0) {
     doc.text('Discount:', summaryX, y, { align: 'right' });
     doc.text(`-LKR ${quotation.discount.toFixed(2)}`, pageWidth - 15, y, { align: 'right' });
+    y += 6;
+  }
+
+  if (quotation.other > 0) {
+    const otherLabel = quotation.otherChargesDescription?.trim() || 'Other Charges';
+    doc.text(`${otherLabel}:`, summaryX, y, { align: 'right' });
+    doc.text(`+LKR ${quotation.other.toFixed(2)}`, pageWidth - 15, y, { align: 'right' });
+    y += 6;
+  }
+
+  if (quotation.advance > 0) {
+    doc.text('Advance:', summaryX, y, { align: 'right' });
+    doc.text(`-LKR ${quotation.advance.toFixed(2)}`, pageWidth - 15, y, { align: 'right' });
     y += 6;
   }
 

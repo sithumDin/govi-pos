@@ -24,6 +24,7 @@ interface Quotation {
   subtotal: number;
   discount: number;
   other: number;
+  advance: number;
   total: number;
   notes: string;
   validUntil: string;
@@ -54,6 +55,7 @@ export default function QuotationsPage() {
     subtotal: 0,
     discount: 0,
     other: 0,
+    advance: 0,
     total: 0,
     notes: '',
     validUntil: '',
@@ -116,7 +118,7 @@ export default function QuotationsPage() {
 
     const updatedItems = [...formData.items, newItem];
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-    const total = subtotal - (formData.discount || 0) + (formData.other || 0);
+    const total = subtotal - (formData.discount || 0) + (formData.other || 0) - (formData.advance || 0);
 
     setFormData({
       ...formData,
@@ -143,7 +145,7 @@ export default function QuotationsPage() {
 
     const updatedItems = [...formData.items, newItem];
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-    const total = subtotal - (formData.discount || 0) + (formData.other || 0);
+    const total = subtotal - (formData.discount || 0) + (formData.other || 0) - (formData.advance || 0);
 
     setFormData({
       ...formData,
@@ -159,7 +161,7 @@ export default function QuotationsPage() {
   const removeItem = (index: number) => {
     const updatedItems = formData.items.filter((_, i) => i !== index);
     const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-    const total = subtotal - (formData.discount || 0) + (formData.other || 0);
+    const total = subtotal - (formData.discount || 0) + (formData.other || 0) - (formData.advance || 0);
 
     setFormData({
       ...formData,
@@ -170,13 +172,18 @@ export default function QuotationsPage() {
   };
 
   const updateDiscount = (newDiscount: number) => {
-    const total = formData.subtotal - newDiscount + (formData.other || 0);
+    const total = formData.subtotal - newDiscount + (formData.other || 0) - (formData.advance || 0);
     setFormData({ ...formData, discount: newDiscount, total });
   };
 
   const updateOther = (newOther: number) => {
-    const total = formData.subtotal - (formData.discount || 0) + newOther;
+    const total = formData.subtotal - (formData.discount || 0) + newOther - (formData.advance || 0);
     setFormData({ ...formData, other: newOther, total });
+  };
+
+  const updateAdvance = (newAdvance: number) => {
+    const total = formData.subtotal - (formData.discount || 0) + (formData.other || 0) - newAdvance;
+    setFormData({ ...formData, advance: newAdvance, total });
   };
 
   const handleSaveQuotation = async () => {
@@ -204,6 +211,7 @@ export default function QuotationsPage() {
             subtotal: formData.subtotal,
             discount: formData.discount,
             other: formData.other,
+            advance: formData.advance,
             total: formData.total,
             notes: formData.notes,
             validUntil: formData.validUntil,
@@ -248,6 +256,7 @@ export default function QuotationsPage() {
         subtotal: 0,
         discount: 0,
         other: 0,
+        advance: 0,
         total: 0,
         notes: '',
         validUntil: '',
@@ -880,6 +889,27 @@ export default function QuotationsPage() {
                     type="number"
                     value={formData.other}
                     onChange={(e) => updateOther(parseFloat(e.target.value) || 0)}
+                    min="0"
+                    step="0.01"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      background: 'var(--bg-card)',
+                      border: '2px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '15px', background: 'var(--bg-input)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Advance Payment</label>
+                  <input
+                    type="number"
+                    value={formData.advance}
+                    onChange={(e) => updateAdvance(parseFloat(e.target.value) || 0)}
                     min="0"
                     step="0.01"
                     style={{

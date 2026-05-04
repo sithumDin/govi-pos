@@ -24,6 +24,8 @@ export default function WholesalePage() {
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [discount, setDiscount] = useState('');
+  const [otherCharges, setOtherCharges] = useState('');
+  const [otherChargesDescription, setOtherChargesDescription] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [isCredit, setIsCredit] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
@@ -107,9 +109,10 @@ export default function WholesalePage() {
 
   const subtotal = cart.reduce((sum, c) => sum + getWholesalePrice(c.product) * c.qty, 0);
   const discountAmount = parseFloat(discount) || 0;
-  const total = subtotal - discountAmount;
+  const otherChargesAmount = parseFloat(otherCharges) || 0;
+  const total = subtotal - discountAmount + otherChargesAmount;
   const totalCost = cart.reduce((sum, c) => sum + c.product.costPrice * c.qty, 0);
-  const profit = total - totalCost;
+  const profit = total - totalCost - otherChargesAmount;
   const whatsappPhonePattern = /^\+94\s\d{2}\s\d{3}\s\d{4}$/;
 
   const handleCheckout = async () => {
@@ -148,6 +151,8 @@ export default function WholesalePage() {
       })),
       subtotal,
       discount: discountAmount,
+      otherCharges: otherChargesAmount,
+      otherChargesDescription: otherChargesDescription.trim() || 'Other Charges',
       total,
       profit,
       paymentMethod: isCredit ? 'transfer' : paymentMethod,
@@ -239,6 +244,8 @@ export default function WholesalePage() {
         }
         setCart([]);
         setDiscount('');
+        setOtherCharges('');
+        setOtherChargesDescription('');
         setSelectedCustomer('');
         setIsCredit(false);
         setCustomerPhone('');
@@ -560,19 +567,43 @@ export default function WholesalePage() {
                   </div>
                 </div>
 
+                <div className="checkout-section">
+                  <label>Discount (LKR)</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    placeholder="0.00"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    style={{ marginTop: '6px' }}
+                  />
+                </div>
+                <div className="checkout-section">
+                  <label>Other Charges (Delivery / Labour)</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    placeholder="0.00"
+                    value={otherCharges}
+                    onChange={(e) => setOtherCharges(e.target.value)}
+                    style={{ marginTop: '6px' }}
+                  />
+                </div>
+                {otherChargesAmount > 0 && (
+                  <div className="checkout-section">
+                    <label>What is this charge for? (e.g., Delivery, Labour)</label>
+                    <input
+                      className="form-input"
+                      type="text"
+                      placeholder="e.g., Delivery Cost, Labour"
+                      value={otherChargesDescription}
+                      onChange={(e) => setOtherChargesDescription(e.target.value)}
+                      style={{ marginTop: '6px' }}
+                    />
+                  </div>
+                )}
                 {!isCredit && (
                   <>
-                    <div className="checkout-section">
-                      <label>Discount (LKR)</label>
-                      <input
-                        className="form-input"
-                        type="number"
-                        placeholder="0.00"
-                        value={discount}
-                        onChange={(e) => setDiscount(e.target.value)}
-                        style={{ marginTop: '6px' }}
-                      />
-                    </div>
                     <div className="checkout-section">
                       <label>Payment Method</label>
                       <div className="payment-methods">
@@ -599,6 +630,12 @@ export default function WholesalePage() {
                     <div className="cart-summary-row">
                       <span>Discount</span>
                       <span style={{ color: 'var(--danger)' }}>-{formatLKR(discountAmount)}</span>
+                    </div>
+                  )}
+                  {otherChargesAmount > 0 && (
+                    <div className="cart-summary-row">
+                      <span>{otherChargesDescription.trim() || 'Other Charges'}</span>
+                      <span style={{ color: 'var(--text-primary)' }}>+{formatLKR(otherChargesAmount)}</span>
                     </div>
                   )}
                   <div className="cart-summary-row total">

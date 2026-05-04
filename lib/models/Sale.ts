@@ -16,6 +16,8 @@ const SaleSchema = new Schema({
   items: [SaleItemSchema],
   subtotal: { type: Number, required: true },
   discount: { type: Number, default: 0 },
+  otherCharges: { type: Number, default: 0 },
+  otherChargesDescription: { type: String, default: '' },
   total: { type: Number, required: true },
   profit: { type: Number, required: true },
   paymentMethod: { type: String, enum: ['cash', 'card', 'transfer'], default: 'cash' },
